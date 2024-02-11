@@ -4,14 +4,15 @@ import sqlite3
 import os
 import datetime
 import sys
-sources = ['rakuya','h591','sinyi']
-key_words = ['寓上長安','寓上里安','裕森林','北歐','勇建光翼','水悅','FUN','昇揚','inn','四季文華','天空之城', '品藏', 'Green1','和聚原砌','MY']
-far_community = ['總太青境','總太聚作','敦富花園','鉅虹森美館','大城八月小確幸','日安花園','美樂地','文華硯','松築瓚','風格講義','九月采掬','勝麗方程式','勝麗方程市','CASA','登陽穗悅','七月沐樂','華太怡居','登陽仰峰','家在e起','東方悦','東方悅','鼎泰鑫鴻','櫻花沐然','幸福森林','大城四月泊樂','聚佳捷作','達麗居山','佳泰新麗馳','鵬程NEW1','登陽城之華','惠宇朗庭','鑫時代','大毅人人幸福','裕國豐展','總太2020','通豪高邑','富宇富好','翠堤清境','勝美樹','鴻邑璞麗','興願景','大城樂好事','惠宇一方庭','我愛龍邦','佳福青樂','富宇峰景','情定水蓮','佳福謙邑','一月春語','六月微風','宏台松築','惠宇千曦','自在柳陽']
-far_address = ['軍福','太原路三段','環太東路','松竹','旱溪','東山','軍功','敦富路','太原','好事多']
-bad_community = ['巴黎第六區','赫里翁臻愛','赫里翁傳奇','世界之心','市政愛悅',     # 社區複雜
-                '洲際W']                                                       # 太吵             
+from function import global_api
+# sources = ['rakuya','h591','sinyi']
+# key_words = ['寓上長安','寓上里安','裕森林','北歐','勇建光翼','水悅','FUN','昇揚','inn','四季文華','天空之城', '品藏', 'Green1','和聚原砌','MY']
+# far_community = ['總太青境','總太聚作','敦富花園','鉅虹森美館','大城八月小確幸','日安花園','美樂地','文華硯','松築瓚','風格講義','九月采掬','勝麗方程式','勝麗方程市','CASA','登陽穗悅','七月沐樂','華太怡居','登陽仰峰','家在e起','東方悦','東方悅','鼎泰鑫鴻','櫻花沐然','幸福森林','大城四月泊樂','聚佳捷作','達麗居山','佳泰新麗馳','鵬程NEW1','登陽城之華','惠宇朗庭','鑫時代','大毅人人幸福','裕國豐展','總太2020','通豪高邑','富宇富好','翠堤清境','勝美樹','鴻邑璞麗','興願景','大城樂好事','惠宇一方庭','我愛龍邦','佳福青樂','富宇峰景','情定水蓮','佳福謙邑','一月春語','六月微風','宏台松築','惠宇千曦','自在柳陽']
+# far_address = ['軍福','太原路三段','環太東路','松竹','旱溪','東山','軍功','敦富路','太原','好事多']
+# bad_community = ['巴黎第六區','赫里翁臻愛','赫里翁傳奇','世界之心','市政愛悅',     # 社區複雜
+#                 '洲際W']                                                       # 太吵             
 
-ignore_words = far_community + far_address + bad_community
+# ignore_words = far_community + far_address + bad_community
 
 # delete the house which is not demanded
 def ignore_house(source, ignore_words):
@@ -130,6 +131,15 @@ def transfer_to_exl():
     return None
 
 def dispose():
+    sources      = global_api.getIniInfo("SOURCES", "source").split(",")
+    key_words    = global_api.getIniInfo("KEY_COMMUNITIES", "key_words").split(",")
+    bad_key_words= global_api.getIniInfo("BAD_COMMUNITIES", "key_words").split(",") 
+    far_community= global_api.getIniInfo("BAD_COMMUNITIES", "far_community").split(",") 
+    far_address  = global_api.getIniInfo("BAD_COMMUNITIES", "far_address").split(",") 
+    bad_community= global_api.getIniInfo("BAD_COMMUNITIES", "bad_community").split(",") 
+
+    ignore_words = bad_key_words + far_community + far_address + bad_community
+
     for source in sources:
         new_ignore = ignore_house(source, ignore_words)
         save_to_DB(source, new_ignore)

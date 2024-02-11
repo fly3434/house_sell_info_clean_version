@@ -3,8 +3,9 @@ import sqlite3
 import os
 import datetime
 import sys
+from function import global_api
 
-sources = ['rakuya','h591','sinyi'] 
+# sources = ['rakuya','h591','sinyi'] // delete
 
 def open_file(source, before_day):
     main_dir = os.path.join('function', 'data', 'crawling')
@@ -46,7 +47,7 @@ def compare(df_today, df_yesterday):
     #compare new house
     for house in df_today.iloc:
         if house['連結'] not in df_yesterday['連結'].tolist():
-            df_today_new = df_today_new.append(house, ignore_index = True)
+            df_today_new = pd.concat([df_today_new, house], ignore_index=True)
     print('Objects are Compared successfully...New objects total: ' + str(len(df_today_new)) + ' counts')
 
     # #compare deleted house
@@ -72,6 +73,7 @@ def save(source, df_today_new):
 
 
 def compare_to_save():
+    sources = global_api.getIniInfo("SOURCES", "source").split(",")
     for source in sources:
         df_today = open_file(source, 0)      # open today data
         df_yesterday = open_file(source, 1)  # open yesterday data
