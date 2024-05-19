@@ -10,12 +10,26 @@ import time
 import random
 import sqlite3
 from function import global_api
+DEFAULT_ROWS_IN_RAKUYA_PAGE = 19
 
-def get_rakuya():
-    print("===== Start Parsing Rakuya houses =====")
-    df_rakuya_house = pd.DataFrame(columns=['標題','社區','坪數','格局','總價','萬/坪','屋齡','樓層','連結'])
+def rakuya_url_trans(url):
+    # from //www.rakuya.com.tw/xxx 
+    # to   //www.rakuya.com.tw/xxx&page=
+
+    if url.endswith("&page="):
+        return url
+    else:
+        return url + "&page="
+
+def get_rakuya(area, url_from_ini):
+    print("===== Start Parsing " + area + " houses from Rakuya =====")
+    df_rakuya_house = global_api.TABLETITLE
+    source          = "Rakuya"
     page_count      = 1
+    first_page      = True
     last_house      = False
+    total_rows      = -1
+    total_page      = -1
 
     while last_house == False: # check if this is last page
         headers = {
@@ -24,17 +38,23 @@ def get_rakuya():
         'Accept-Encoding':'gzip, deflate, br',
         'Accept-Language':'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
         }
-        url_front = global_api.getIniInfo("SOURCE_URL", "rakuya")
-        url       = url_front + str(page_count)
+        # url_from_ini = global_api.getAreaIniInfo(area, "SOURCE_URL", "rakuya")
+        url_standard = rakuya_url_trans(url_from_ini)
+        url       = url_standard + str(page_count)
         # url      = "https://www.rakuya.com.tw/sell/result?city=8&zipcode=407%2C406&price=500~1500&room=2%2C3&floor=7~11%2C12~&age=~15&other=P&sort=11&browsed=0&page=" + str(page_count)
         res       = requests.get(url, headers = headers)
         tree      = etree.HTML(res.text)   
 
-        # get website element
-        # href = tree.xpath('//a[contains(@class,"browseItemDetail")]/@href') 
-        
+        # print Total rows
+        if (first_page):
+            total_rows_tmp = tree.xpath('/html/body/div[8]/div[2]/div[1]/div[1]/div[2]/div/span/span')
+            total_rows = total_rows_tmp[0].text
+            total_page = -(((-1) * int(total_rows)) // DEFAULT_ROWS_IN_RAKUYA_PAGE)
+            print("Total " + str(total_rows) + " houses, " + str(total_page) + " pages, Start parsing...")
+            first_page = False
+
         # parsing from first house to last house (20) on one page, get data by xpath
-        for j in range(1,20):
+        for j in range(1, DEFAULT_ROWS_IN_RAKUYA_PAGE + 1):
             title          = tree.xpath('/html/body/div[8]/div[2]/div[1]/div[4]/div[1]/section['+ str(j) +']/a/div[1]/h2')
             if title == []:  # if title = empty, means there is no data behind it
                 last_house = True
@@ -44,7 +64,7 @@ def get_rakuya():
             #     title = tree.xpath(' /html/body/div[7]/div[2]/div[1]/div[4]/section['+ str(j) +']/a/div[2]/div[1]/span[2]')
             link           = tree.xpath('/html/body/div[8]/div[2]/div[1]/div[4]/div[1]/section['+ str(j) +']/a/@href')
             community      = tree.xpath('/html/body/div[8]/div[2]/div[1]/div[4]/div[1]/section['+ str(j) +']/a/div[2]/div[2]/div[1]/h2/span[2]')
-            size           = tree.xpath('/html/body/div[8]/div[2]/div[1]/div[4]/div[1]/section['+ str(j) +']/a/div[2]/div[2]/div[1]/div/ul/li[1]')
+            size           = tree.xpath('/html/body/div[8]/div[2]/div[1]/div[4]/div[1]/section['+ str(j) +']/a/div[2]/div[2]/div[1]/div/ul/li[1]/text()')
             room_count     = tree.xpath('/html/body/div[8]/div[2]/div[1]/div[4]/div[1]/section['+ str(j) +']/a/div[2]/div[2]/div[1]/div/div/ul/li[2]')
             price          = tree.xpath('/html/body/div[8]/div[2]/div[1]/div[4]/div[1]/section['+ str(j) +']/a/div[2]/div[2]/div[2]/div/span/b')
             # if price == []:
@@ -65,12 +85,16 @@ def get_rakuya():
                 floor      = tree.xpath('/html/body/div[8]/div[2]/div[1]/div[4]/div[1]/section['+ str(j) +']/a/div[2]/div[2]/div[1]/div/div/ul/li[4]')        
 
             # save these data to dataframe
-            df_rakuya_house = pd.concat([df_rakuya_house, pd.DataFrame([{'標題': title[0].text, '社區': community[0].text, '坪數':size[0].text, '格局': room_count[0].text, '總價': price[0].text, '萬/坪': price_per_unit, '屋齡': house_year, '樓層': floor[0].text, '連結': link[0]}])], ignore_index = True)
+            df_rakuya_house = pd.concat([df_rakuya_house, pd.DataFrame([{'標的': '', '忽略': '', '標題': title[0].text, '社區': community[0].text, '坪數':size[1], '格局': room_count[0].text, '總價': price[0].text, '萬/坪': price_per_unit, '屋齡': house_year, '樓層': floor[0].text, '來源': source, '連結': link[0]}])], ignore_index = True)
+        
+        # to prevent total rows count can fully divided by dafault rows in a page 
+        if page_count >= -(((-1) * int(total_rows)) // DEFAULT_ROWS_IN_RAKUYA_PAGE):
+            last_house = True
 
-        print('Parse page number: ' + str(page_count) + ' from Rakuya successfully')
+        print('Parse page number: ' + str(page_count) + '/' + str(total_page) + ' from Rakuya successfully')
         page_count += 1
-        time.sleep(random.randint(8,12))
-    print('Parsing rakuya successfully, Saving...')
+        time.sleep(random.randint(2,6))
+    print("Parsing " + area + " data from Rakuya successfully, Saving...")
     return df_rakuya_house
 
 ################################################
@@ -139,8 +163,9 @@ def get_591_res(rs, token, url):
 # extract elements which we need
 def get_591_page_data(js):
     # create emply dataframe
-    df_house = pd.DataFrame(columns=['標題','社區','坪數','格局','總價','萬/坪','屋齡','樓層','連結'])
-    
+    df_house = global_api.TABLETITLE
+    source = "591"
+
     # check the max row on this page
     max_row = len(js.get('data').get('house_list'))
     for i in range(0 , max_row):
@@ -162,7 +187,7 @@ def get_591_page_data(js):
             houseid   = js.get('data').get('house_list')[i].get('houseid')
             connection= 'https://sale.591.com.tw/home/house/detail/2/' + str(houseid) + '.html'
             # append these elements to dataframe
-            df_house = pd.concat([df_house, pd.DataFrame([{'標題': title, '社區': community, '坪數':size_p, '格局': room_count, '總價': price, '萬/坪': unitprice, '屋齡': age, '樓層': floor, '連結': connection}])], ignore_index=True)
+            df_house = pd.concat([df_house, pd.DataFrame([{'標的': '', '忽略': '', '標題': title, '社區': community, '坪數':size_p, '格局': room_count, '總價': price, '萬/坪': unitprice, '屋齡': age, '樓層': floor,'來源': source, '連結': connection}])], ignore_index=True)
     
     return df_house
 
@@ -181,13 +206,13 @@ def get_URL_wo_totalRows(url):
     
     return url_wo_totalRows
 
-def main_get_591():
-    print("===== Start Parsing 591 houses =====")
+def main_get_591(area, url_from_ini):
+    print("===== Start Parsing " + area + " houses from 591 =====")
     warnings.filterwarnings("ignore") 
     rs = requests.session()
     
-    url_from_ini     = global_api.getIniInfo("SOURCE_URL", "h591")
-    df_591_total     = pd.DataFrame(columns=['標題','社區','坪數','格局','總價','萬/坪','屋齡','樓層','連結'])
+    # url_from_ini     = global_api.getAreaIniInfo(area, "SOURCE_URL", "h591")
+    df_591_total     = global_api.TABLETITLE
     first_row        = 0
     page             = 1
     url_wo_totalRows = get_URL_wo_totalRows(url_from_ini)
@@ -216,10 +241,10 @@ def main_get_591():
         time.sleep(random.randint(2,6))
 
         # check whether is last page, if yes, exit the loop (30 houses on one page)
-        if page >= -(((-1) * int(total_rows)) // 30):
-            print('Parsing 591 data successfully, Saving...')
+        if page >= -(((-1) * int(total_rows)) // DEFAULT_ROWS_IN_591_PAGE):
+            print("Parsing " + area + " data from 591 successfully, Saving...")
             break
-        first_row += 30
+        first_row += DEFAULT_ROWS_IN_591_PAGE
         page      += 1
 
     return df_591_total
@@ -264,7 +289,7 @@ def main_get_591():
 #     end_index = 3 + rows_in_page
     
 #     # create emply dataframe
-#     df_house = pd.DataFrame(columns=['標題','社區','坪數','格局','總價','萬/坪','屋齡','樓層','連結'])
+#     df_house = global_api.TABLETITLE
 
 #     driver = global_api.driverBySelenium(url)
 
@@ -345,7 +370,7 @@ def main_get_591():
 # def main_get_591():
 #     print("===== Start Parsing 591 houses =====")
 #     url           = global_api.getIniInfo("SOURCE_URL", "h591")
-#     df_591_house  = pd.DataFrame(columns=['標題','社區','坪數','格局','總價','萬/坪','屋齡','樓層','連結'])
+#     df_591_house  = global_api.TABLETITLE
 #     is_first_page = True
 #     first_row     = 0
 #     rows_in_page  = DEFAULT_ROWS_IN_591_PAGE
@@ -415,7 +440,7 @@ def get_sinyi_total_row(response):
 # parsing house data and save in dataframe 'df_rakuya_house'
 def sinyi_crawler(response):
     tree                 = etree.HTML(response.text)
-    df_rakuya_house      = pd.DataFrame(columns=['標題','社區','坪數','格局','總價','萬/坪','屋齡','樓層','連結'])
+    df_rakuya_house      = global_api.TABLETITLE
     
     # parsing 1 to 20 rows data since only 20 rows in one page
     for i in range(1,21):
@@ -440,13 +465,13 @@ def sinyi_crawler(response):
         connection       = 'https://www.sinyi.com.tw' + str(href)
 
         # append these elements to dataframe
-        df_rakuya_house  = df_rakuya_house.append({'標題': title[0].text, '社區': community[0], '坪數':size[0], '格局': room[0].text, '總價': price[0].text, '萬/坪': short_unit_price, '屋齡': age[0].text, '樓層': floor[0], '連結': connection}, ignore_index = True)
+        df_rakuya_house  = df_rakuya_house.append({'標的': '-1', '忽略': '-1', '標題': title[0].text, '社區': community[0], '坪數':size[0], '格局': room[0].text, '總價': price[0].text, '萬/坪': short_unit_price, '屋齡': age[0].text, '樓層': floor[0], '連結': connection}, ignore_index = True)
     return df_rakuya_house
 
 
 def main_get_sinyi():
     url             = global_api.getIniInfo("SOURCE_URL", "sinyi")
-    df_sinyi_house  = pd.DataFrame(columns=['標題','社區','坪數','格局','總價','萬/坪','屋齡','樓層','連結'])
+    df_sinyi_house  = global_api.TABLETITLE
     page_number     = 1
     is_first_page   = True
 
@@ -478,42 +503,58 @@ def main_get_sinyi():
 ###########    save data area    ###############
 ################################################
 
-def save_to_DB(source, df_house):
-    if (df_house.empty):
-        print("df_house: " + source + " is empty, skip save to DB!")
-        return None
+# def save_to_DB(area, df_house):
+#     tableName = str(area)
+#     global_api.save_to_DB(global_api.SQLiteDIR, global_api.SQLiteFILENAME, area, df_rakuya_house)
 
-    # build main dir
-    main_dir = os.path.join('function', 'data', 'crawling')
-    if not os.path.isdir(main_dir):
-        os.makedirs(main_dir)
+    # if (df_house.empty):
+    #     print("df_house: " + source + " is empty, skip save to DB!")
+    #     return None
 
-    # open splite3 and save
-    now = datetime.datetime.now()
-    conn = sqlite3.connect(main_dir + '\\' + now.strftime('%Y%m%d') + '.sqlite3')
-    df_house.to_sql( str(source) +'_daily_house', conn, if_exists = 'replace')
-    df_from_DB = pd.read_sql('select * from ' + str(source) +'_daily_house', conn)
-    print('Save ' + str(source) + ' house successfully')
-    return None
+    # # build main dir
+    # main_dir = os.path.join('function', 'data', 'crawling')
+    # if not os.path.isdir(main_dir):
+    #     os.makedirs(main_dir)
+
+    # # open splite3 and save
+    # now        = datetime.datetime.now()
+    # conn       = sqlite3.connect(main_dir + '\\' + now.strftime('%Y%m%d') + '.sqlite3')
+    # table_name = str(area) + '_' + str(source) +'_house'
+    # df_house.to_sql( table_name, conn, if_exists = 'replace')
+    # df_from_DB = pd.read_sql('select * from ' + table_name, conn)
+    # print('Save ' + str(table_name) + ' successfully')
+    # return None
 
 ################################################
 ################    Main    ####################
 ################################################
 
 def crawl_and_save():
-    # crawl rakuya and save
-    df_rakuya_house = get_rakuya()
-    save_to_DB('rakuya', df_rakuya_house)
+    enableAreas = global_api.getEnableAreas()
+    print("Total " + str(len(enableAreas)) + " areas: " + ', '.join(enableAreas))
 
-    # crawl 591 and save
-    df_591_house = main_get_591()
-    save_to_DB('h591', df_591_house)
+    for area in enableAreas:
+        # sources      = global_api.getAreaIniInfo(area, "SOURCES", "source").split(",")
+        return_value = global_api.getAreaIniInfo(area, "SOURCE_URL", "", ";")
+        if (return_value != None):
+            url_list = return_value.split(";")
 
-    # crawl Sinyi and save
-    # df_sinyi_house = main_get_sinyi()
-    # save_to_DB('sinyi', df_sinyi_house)
+            for each_url in url_list:
+                if("sale.591.com.tw" in each_url):
+                    df_591_house = main_get_591(area, each_url)
+                    global_api.save_to_DB(global_api.SQLiteDIR, global_api.SQLiteFILENAME, area, df_591_house)
 
-    return None
+                elif("www.rakuya.com.tw" in each_url):
+                    df_rakuya_house = get_rakuya(area, each_url)
+                    global_api.save_to_DB(global_api.SQLiteDIR, global_api.SQLiteFILENAME, area, df_rakuya_house, "append")
+                
+                # elif(source == 'sinyi'):
+                    # df_sinyi_house = main_get_sinyi()
+                    # global_api.save_to_DB(global_api.SQLiteDIR, global_api.SQLiteFILENAME, area, df_sinyi_house, "append")
+        else:
+            return False
+
+    return True
 
 if __name__ == '__main__':
     crawl_and_save()
